@@ -149,8 +149,12 @@ Bridgefin was checked against a real Jellyfin 10.11 server's responses, the offi
 client, and Swiftfin/Infuse behaviour documented in their source and community reports. These
 still need confirming on a device:
 
+- Swiftfin itself (only its documented behaviour was checked)
 - Infuse search in Direct Mode
 - Infuse's version picker (it may only offer versions that were loaded recently; otherwise it
   plays the best one)
 - Infuse following the redirect to TorBox (switch to *Through this server* if it doesn't)
+- Subtitle tracks showing in a real player's menu (the server side is tested)
+- Infuse Library Mode with large show catalogs: the first sync fetches details for every show
+  in each catalog, so it can be slow
 - Real TorBox resolution and Stremio account sync with a live account

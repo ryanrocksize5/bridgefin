@@ -149,6 +149,7 @@ function base(ctx: DtoContext, id: string, name: string, type: string): any {
     MediaType: 'Unknown',
     LockedFields: [],
     LockData: false,
+    Chapters: [],
   };
 }
 
@@ -357,6 +358,7 @@ export function viewDto(ctx: DtoContext, id: string, name: string, collectionTyp
   dto.DisplayPreferencesId = id;
   dto.ParentId = ctx.ids.toId('view:root');
   dto.Path = `/bridgefin/${id}`;
+  dto.DateLastMediaAdded = DATE_ZERO;
   dto.LocationType = 'FileSystem';
   dto.ChildCount = 0;
   dto.UserData = userDataDto(id, undefined, false);

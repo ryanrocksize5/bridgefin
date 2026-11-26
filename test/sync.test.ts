@@ -16,6 +16,7 @@ const META = { id: 'tt9', type: 'series', name: 'Show', videos };
 
 function setup(remote: StremioLibraryItem[]) {
   const db = openDb(':memory:');
+  const state = { failGet: false };
   const puts: StremioLibraryItem[][] = [];
   const calls: string[] = [];
   const fetchImpl: typeof fetch = async (input, init) => {
@@ -25,7 +26,10 @@ function setup(remote: StremioLibraryItem[]) {
     const body = JSON.parse(String(init?.body ?? '{}'));
     const ok = (result: unknown) => new Response(JSON.stringify({ result }), { headers: { 'content-type': 'application/json' } });
     if (method === 'login') return ok({ authKey: 'AK', user: {} });
-    if (method === 'datastoreGet') return ok(body.all ? remote : remote.filter((r) => body.ids.includes(r._id)));
+    if (method === 'datastoreGet') {
+      if (state.failGet) throw new TypeError('fetch failed');
+      return ok(body.all ? remote : remote.filter((r) => body.ids.includes(r._id)));
+    }
     if (method === 'datastorePut') {
       puts.push(body.changes);
       return ok({ success: true });
@@ -39,7 +43,7 @@ function setup(remote: StremioLibraryItem[]) {
   db.prepare('INSERT INTO meta_cache (key, json, fetched_at) VALUES (?, ?, ?)').run('movie:tt1', JSON.stringify({ id: 'tt1', type: 'movie', name: 'Film' }), Date.now());
   const library = new Library(db);
   const sync = new StremioSync(db, addons, library, fetchImpl);
-  return { db, sync, library, puts, calls };
+  return { db, sync, library, puts, calls, state };
 }
 
 const base = (o: Partial<StremioLibraryItem>): StremioLibraryItem => ({
@@ -96,4 +100,39 @@ test('importing addons skips local-only addons', async () => {
   await sync.login('a@b.c', 'pw');
   const r = await sync.importAddons();
   assert.deepEqual(r, { added: 0, skipped: 1 });
+});
+
+test('write-back never pushes blind when Stremio cannot be read; items stay pending', async () => {
+  const { sync, library, puts, state } = setup([base({})]);
+  await sync.login('a@b.c', 'pw');
+  sync.setWriteBack(true);
+  library.setPlayed(keys.movie('tt1'), null, true);
+  state.failGet = true;
+  await assert.rejects(() => sync.flush());
+  assert.equal(puts.length, 0);
+  assert.equal(sync.status().pending, 1);
+  state.failGet = false;
+  assert.equal(await sync.flush(), 1);
+  assert.equal(puts[0][0].state.flaggedWatched, 1);
+  assert.equal(sync.status().pending, 0);
+});
+
+test('watching a title saved in Stremio (but not pulled yet) keeps it in the Stremio library', async () => {
+  const { sync, library, puts } = setup([base({ removed: false, name: 'Film' })]);
+  await sync.login('a@b.c', 'pw');
+  sync.setWriteBack(true);
+  // No local library row; only playback progress here.
+  library.reportProgress(keys.movie('tt1'), null, 30 * 60 * 10_000_000, 100 * 60 * 10_000_000, true);
+  await sync.flush();
+  assert.equal(puts[0][0].removed, false);
+  assert.equal(puts[0][0].state.timeOffset, 30 * 60 * 1000);
+});
+
+test('removing a favorite locally (newer than Stremio) removes it there', async () => {
+  const { sync, library, puts } = setup([base({ removed: false })]);
+  await sync.login('a@b.c', 'pw');
+  sync.setWriteBack(true);
+  library.setInLibrary(keys.movie('tt1'), 'movie', 'Film', undefined, false);
+  await sync.flush();
+  assert.equal(puts[0][0].removed, true);
 });

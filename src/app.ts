@@ -104,14 +104,28 @@ export function clientIp(req: IncomingMessage): string {
   return first || req.socket.remoteAddress || '';
 }
 
-export function sendJson(res: ServerResponse, status: number, body: unknown): void {
+/** Properties whose values are dictionaries: Jellyfin keeps their keys as-is in camelCase mode. */
+const DICT_PROPS = new Set(['ImageTags', 'ProviderIds', 'ImageBlurHashes', 'RequiredHttpHeaders', 'CustomPrefs']);
+
+/** Jellyfin's `Accept: application/json; profile="CamelCase"` output: first letter lowercased. */
+export function camelize(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(camelize);
+  if (!v || typeof v !== 'object') return v;
+  const out: Record<string, unknown> = {};
+  for (const [k, val] of Object.entries(v)) {
+    out[k.charAt(0).toLowerCase() + k.slice(1)] = DICT_PROPS.has(k) ? val : camelize(val);
+  }
+  return out;
+}
+
+export function sendJson(res: ServerResponse, status: number, body: unknown, camel = false): void {
   if (res.headersSent) return;
   if (body === undefined || status === 204) {
     res.writeHead(204);
     res.end();
     return;
   }
-  const json = JSON.stringify(body);
+  const json = JSON.stringify(camel ? camelize(body) : body);
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(json) });
   res.end(json);
 }
@@ -172,8 +186,9 @@ export async function handle(app: App, req: IncomingMessage, res: ServerResponse
     };
     const result = await found.route.handler(ctx);
     if (!res.headersSent && !res.writableEnded) {
+      const camel = /profile="?camelcase/i.test(String(req.headers.accept ?? ''));
       if (result === undefined) sendJson(res, 204, undefined);
-      else sendJson(res, 200, result);
+      else sendJson(res, 200, result, camel);
     }
   } catch (e) {
     const status = e instanceof HttpError ? e.status : 500;

@@ -1,6 +1,6 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import type { DB } from '../db.ts';
-import { getJsonSetting } from '../db.ts';
+import { getJsonSetting, getSetting, setSetting } from '../db.ts';
 import { log } from '../log.ts';
 import type { AddonService } from '../stremio/addons.ts';
 import type { Stream, Subtitle } from '../stremio/types.ts';
@@ -35,6 +35,8 @@ export const DEFAULT_PREFS: StreamPrefs = {
 
 export interface StreamCandidate {
   id: string; // 32-hex media source id
+  /** Placeholder meaning "best available at play time". */
+  auto?: boolean;
   itemKey: string;
   addonId: string;
   addonName: string;
@@ -59,6 +61,7 @@ export class StreamService {
   readonly torbox: Torbox;
   private resolving = new Map<string, Promise<string>>();
   private warm = new TtlCache<StreamCandidate[]>(30 * 60_000, 500);
+  private autoWritten = new Map<string, number>();
 
   constructor(db: DB, addons: AddonService, torbox: Torbox) {
     this.db = db;
@@ -143,6 +146,28 @@ export class StreamService {
     this.remember(final);
     this.warm.set(itemKey, final);
     return final;
+  }
+
+  /**
+   * Unguessable id for the "best available" placeholder version of an item, recorded as an
+   * issued source so players that stream without a token (Infuse) can still use it.
+   */
+  autoSourceId(itemKey: string): string {
+    let secret = getSetting(this.db, 'sourceSecret');
+    if (!secret) {
+      secret = randomBytes(16).toString('hex');
+      setSetting(this.db, 'sourceSecret', secret);
+    }
+    const id = createHash('md5').update(`auto|${itemKey}|${secret}`).digest('hex');
+    const last = this.autoWritten.get(id) ?? 0;
+    if (Date.now() - last > 86400_000) {
+      const stub = { id, itemKey, auto: true };
+      this.db
+        .prepare('INSERT INTO sources (id, item_key, json, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET created_at = excluded.created_at')
+        .run(id, itemKey, JSON.stringify(stub), Date.now());
+      this.autoWritten.set(id, Date.now());
+    }
+    return id;
   }
 
   /** Candidates computed in the last 30 minutes, without any network calls. */

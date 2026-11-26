@@ -89,7 +89,7 @@ iPhone (Infuse/Swiftfin) ──Jellyfin API──► Bridgefin ──► Stremio
 
 - **http/router** — tiny case-insensitive router on `node:http`; strips optional
   `/emby` / `/jellyfin` prefixes; parses all Jellyfin auth header variants; logs every
-  unhandled route (method, path, query, user agent) and returns a harmless empty result.
+  unhandled route (method, path, query, user agent); see "Decisions" for the responses.
 - **ids** — persistent table mapping Stremio keys (`movie:tt123`, `series:tt123`,
   `season:tt123:1`, `episode:tt123:1:2`, `catalog:<addon>:<type>:<id>`) ↔ 32-hex ids
   (MD5 of the key). Deterministic and reversible via DB.
@@ -126,15 +126,47 @@ created_at) · sync_state(k, v).
 
 ### Paging & limits
 
-Catalog libraries are paged live; Library-Mode recursive walks are capped per catalog
-(`CATALOG_LIMIT`, default 200) with an honest `TotalRecordCount`.
+Catalog libraries are paged live, capped per catalog (`CATALOG_LIMIT`, default 300).
+Infuse reads `TotalRecordCount` only from the first page, so totals are exact: the
+(cached) catalog pages are walked to the end or the cap on first request.
 
-## Left to the builder
+## Decisions made during the build (builder's calls)
 
-Exact Jellyfin JSON shapes (copy from the reference server), heuristics for stream
-labelling, cache TTL tuning, admin page styling.
+- **Reported version** follows `JELLYFIN_VERSION`; Swiftfin warns below 12.1. Response
+  shapes were captured from a real Jellyfin 10.11 server (see "Verification").
+- **Auth header** parsed like Jellyfin's AuthorizationContext: comma-split, quotes optional,
+  values may contain spaces (Swiftfin sends them unquoted).
+- **Tokenless streams** (Infuse sometimes omits the token) are allowed only for version
+  ids Bridgefin issued for that item, including an unguessable id for the "Best available"
+  placeholder; a bare item id still needs a token, so nobody can spend the TorBox account
+  by guessing ids.
+- **List responses** carry real versions when they were computed in the last 30 minutes,
+  otherwise one "Best available" placeholder; detail pages and PlaybackInfo always carry
+  the full list.
+- **Library Mode**: `Recursive + IncludeItemTypes=Season|Episode` under a library returns
+  every season/episode of its shows (Infuse hides all shows otherwise).
+- **Unknown routes**: list-shaped GETs return an empty list, other GETs 404, POSTs 204;
+  never 401. All are recorded for the settings page's Troubleshooting list.
+- **Swiftfin's `/Playback/BitrateTest`** is served (playback fails without it).
+- **Sync write-back safety**: never pushes when the current remote item can't be read
+  (items stay pending); only changes Stremio library membership when the local decision
+  is newer than Stremio's; watched marks are merged, never removed on import.
+- **Catalogs with a required extra that has options** (Cinemeta "New" needs a year) are
+  browsable using the first option.
 
-## Unverifiable here — must be tested on a real device
+## Verification done
+
+- 26 automated tests: full Jellyfin flow against a mock addon + mock TorBox (cached-only
+  filtering, no TorBox writes before play, file pick from season packs, proxy ranges,
+  subtitles, progress → resume → played, Next Up, Library Mode, tokenless streams), and
+  sync against a mock Stremio API including the stremio-core watched-bitfield test vector.
+- Field-by-field diff against a real Jellyfin 10.11 server's responses.
+- Official jellyfin-web client: login, home, live Cinemeta catalogs with posters, playback
+  through the redirect.
+
+## Unverified — must be tested on a real device / account
 
 Infuse Direct-Mode search, Infuse version picker, Infuse following 302 to TorBox CDN,
-real TorBox resolution, Stremio account sync.
+Swiftfin as a whole, subtitle display in a real player, Library Mode on large show
+catalogs (hundreds of metadata fetches in one request), real TorBox resolution, Stremio
+account sync with a live account.

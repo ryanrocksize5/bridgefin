@@ -122,11 +122,12 @@ export class Playback {
     const subs = await this.subtitles(t);
     let chosen = list;
     if (mediaSourceId && mediaSourceId !== itemId) {
-      const hit = list.filter((c) => c.id === mediaSourceId);
+      const msid = mediaSourceId.replace(/-/g, '').toLowerCase();
+      const hit = list.filter((c) => c.id === msid);
       if (hit.length) chosen = hit;
       else {
-        const old = this.streams.source(mediaSourceId);
-        if (old) chosen = [old];
+        const old = this.streams.source(msid);
+        if (old && !old.auto) chosen = [old];
       }
     }
     const sources = chosen.map((c) => this.mediaSource(itemId, t, c, subs));
@@ -155,16 +156,18 @@ export class Playback {
 
   /** Placeholder source used in lists so clients see the item as playable without fetching streams. */
   placeholderSource(itemId: string, runtimeTicks?: number): any {
+    const key = this.catalog.ids.toKey(itemId);
+    const id = key ? this.streams.autoSourceId(key) : itemId;
     return {
       Protocol: 'File',
-      Id: itemId,
+      Id: id,
       Path: `/bridgefin/${itemId}.mkv`,
       Type: 'Default',
       Container: 'mkv',
       Size: 0,
       Name: 'Best available',
       IsRemote: false,
-      ETag: itemId,
+      ETag: id,
       ...(runtimeTicks ? { RunTimeTicks: runtimeTicks } : {}),
       ReadAtNativeFramerate: false,
       IgnoreDts: false,
@@ -199,7 +202,7 @@ export class Playback {
     if (mediaSourceId && mediaSourceId.replace(/-/g, '').toLowerCase() !== itemId) {
       const msid = mediaSourceId.replace(/-/g, '').toLowerCase();
       const hit = list.find((c) => c.id === msid) ?? this.streams.source(msid);
-      if (hit) ordered = [hit, ...list.filter((c) => c.id !== hit.id)];
+      if (hit && !hit.auto) ordered = [hit, ...list.filter((c) => c.id !== hit.id)];
     }
     if (!ordered.length) throw new HttpError(404, 'No cached streams found for this title');
     return { t, ordered };

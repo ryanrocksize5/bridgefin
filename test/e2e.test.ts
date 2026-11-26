@@ -363,6 +363,15 @@ describe('Jellyfin API', () => {
     assert.equal((await bt.arrayBuffer()).byteLength, 1000);
   });
 
+  test('camelCase profile like Jellyfin (dictionary keys untouched)', async () => {
+    const item = await api(`/Items/${movieId}`, { headers: { accept: 'application/json; profile="CamelCase"' } });
+    assert.equal(item.id, movieId);
+    assert.equal(item.providerIds.Imdb, 'tt0000001');
+    assert.ok(item.imageTags.Primary);
+    assert.equal(typeof item.userData.playbackPositionTicks, 'number');
+    assert.ok('isHD' in item);
+  });
+
   test('stream without token: only for issued version ids', async () => {
     const pb = await api(`/Items/${movieId}/PlaybackInfo`);
     const ok = await fetch(`${B}/Videos/${movieId}/stream?static=true&MediaSourceId=${pb.MediaSources[0].Id}`, { redirect: 'manual' });
@@ -371,6 +380,23 @@ describe('Jellyfin API', () => {
     assert.equal(bare.status, 401);
     const other = await fetch(`${B}/Videos/${'0'.repeat(32)}/stream?MediaSourceId=${pb.MediaSources[0].Id}`, { redirect: 'manual' });
     assert.equal(other.status, 401);
+    // "Best available" placeholder from a list response also plays without a token.
+    const views = await api('/UserViews');
+    const top = views.Items.find((i: any) => i.Name === 'Top Movies');
+    const list = await api(`/Items?ParentId=${top.Id}&Fields=MediaSources`);
+    const other2 = list.Items.find((i: any) => i.Name === 'Other Movie');
+    const ph = other2.MediaSources[0];
+    assert.equal(ph.Name, 'Best available');
+    assert.notEqual(ph.Id, other2.Id);
+    // Tokenless request with the placeholder id passes auth (Other Movie simply has no streams → 404, not 401).
+    const anon = await fetch(`${B}/Videos/${other2.Id}/stream?static=true&MediaSourceId=${ph.Id}`, { redirect: 'manual' });
+    assert.equal(anon.status, 404);
+    // The placeholder id can't be reused for a different item.
+    const cross = await fetch(`${B}/Videos/${movieId}/stream?static=true&MediaSourceId=${ph.Id}`, { redirect: 'manual' });
+    assert.equal(cross.status, 401);
+    // With a token, an unknown version id falls back to the best version.
+    const fresh = await fetch(`${B}/Videos/${movieId}/stream?static=true&MediaSourceId=${ph.Id.replace(/./g, 'f')}`, { redirect: 'manual', headers: { 'x-emby-token': token } });
+    assert.equal(fresh.status, 302);
   });
 
   test('Infuse Library Mode: seasons/episodes under a library, exact totals, provider id lookup', async () => {

@@ -277,7 +277,15 @@ export class StremioSync {
     if (!key || !this.writeBack() || !this.pending.size) return 0;
     const libKeys = [...this.pending];
     const stremioIds = libKeys.map((k) => parseKey(k).stremioId!);
-    const remote = await this.call<StremioLibraryItem[]>('datastoreGet', { authKey: key, collection: 'libraryItem', ids: stremioIds, all: false }).catch(() => [] as StremioLibraryItem[]);
+    // If the current remote state can't be read, push nothing (items stay pending):
+    // writing blind would overwrite Stremio's data with blanks.
+    let remote: StremioLibraryItem[];
+    try {
+      remote = await this.call<StremioLibraryItem[]>('datastoreGet', { authKey: key, collection: 'libraryItem', ids: stremioIds, all: false });
+    } catch (e) {
+      this.lastError = (e as Error).message;
+      throw e;
+    }
     const byId = new Map((remote ?? []).map((r) => [r._id, r]));
     const changes: StremioLibraryItem[] = [];
     for (const lk of libKeys) {
@@ -313,9 +321,13 @@ export class StremioSync {
           behaviorHints: { defaultVideoId: null, featuredVideoId: null, hasScheduledVideos: type === 'series' },
           state: { lastWatched: null, timeWatched: 0, timeOffset: 0, overallTimeWatched: 0, timesWatched: 0, flaggedWatched: 0, duration: 0, video_id: null, watched: null, noNotif: false },
         };
-    const inLib = !!row && !row.removed;
-    base.removed = !inLib;
-    base.temp = !inLib;
+    // Only change library membership when we actually have a local decision that is newer
+    // than Stremio's; otherwise keep whatever Stremio says (e.g. added on another device).
+    const remoteM = existing ? Date.parse(existing._mtime) || 0 : 0;
+    if (row && (!existing || row.mtime > remoteM)) {
+      base.removed = !!row.removed;
+      base.temp = !!row.removed;
+    }
     base._mtime = now;
     const s = base.state;
 

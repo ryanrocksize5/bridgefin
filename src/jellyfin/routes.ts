@@ -160,7 +160,7 @@ export function registerJellyfinRoutes(app: App): void {
   r.get(['/Items/Filters', '/Items/Filters2'], (c) => {
     const view = c.query.parentid ? viewFor(app, c.query.parentid) : undefined;
     const genres = view ? catalog.catalogGenres(view) : [];
-    if (c.path.toLowerCase().endsWith('filters2')) return { Genres: genres.map((g) => ({ Name: g, Id: hashId(`genre:${g}`) })), Tags: [] };
+    if (c.path.toLowerCase().endsWith('filters2')) return { Genres: genres.map((g) => ({ Name: g, Id: hashId(`genre:${g}`) })), Tags: [], AudioLanguages: [], SubtitleLanguages: [] };
     return { Genres: genres, OfficialRatings: [], Years: [], Tags: [] };
   });
 
