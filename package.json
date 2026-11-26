@@ -1,0 +1,20 @@
+{
+  "name": "bridgefin",
+  "version": "0.1.0",
+  "description": "Lightweight server that exposes Stremio addons (with TorBox) through the Jellyfin API for Infuse and Swiftfin.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/main.ts",
+    "dev": "node --disable-warning=ExperimentalWarning --watch src/main.ts",
+    "test": "node --disable-warning=ExperimentalWarning --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.4",
+    "typescript": "^5.9.3"
+  }
+}
