@@ -3,22 +3,37 @@ import type { DB } from './db.ts';
 import { getSetting, setSetting } from './db.ts';
 import { log } from './log.ts';
 import type { AuthInfo } from './http/router.ts';
+import { LoginLimiter } from './http/limiter.ts';
 
 /** Single-user account + device tokens. */
 export class Auth {
   private db: DB;
+  readonly limiter: LoginLimiter;
 
-  constructor(db: DB) {
+  constructor(db: DB, limiter = new LoginLimiter()) {
     this.db = db;
+    this.limiter = limiter;
   }
 
-  /** Called at startup: seed credentials from env or generate a password once. */
-  init(envUser: string, envPassword: string): void {
-    if (envPassword) {
+  /**
+   * Called at startup. BRIDGEFIN_PASSWORD only sets the *first* login; after that the
+   * settings page owns it (so a restart never undoes a password change). Set
+   * BRIDGEFIN_RESET_PASSWORD=1 for one start to replace a forgotten login.
+   */
+  init(envUser: string, envPassword: string, reset = false): void {
+    const hasLogin = !!getSetting(this.db, 'passwordHash');
+    if (envPassword && (!hasLogin || reset)) {
       this.setCredentials(envUser || 'admin', envPassword);
+      if (reset) {
+        this.revokeAll();
+        log.warn('Login replaced from BRIDGEFIN_PASSWORD and all devices signed out. Remove BRIDGEFIN_RESET_PASSWORD now.');
+      }
       return;
     }
-    if (!getSetting(this.db, 'passwordHash')) {
+    if (envPassword && hasLogin && !this.checkPassword(this.username(), envPassword)) {
+      log.info('BRIDGEFIN_PASSWORD differs from the saved login; the saved one (from the settings page) is used.');
+    }
+    if (!hasLogin) {
       const generated = randomBytes(9).toString('base64url');
       this.setCredentials(envUser || 'admin', generated);
       log.warn('================================================================');
@@ -37,6 +52,21 @@ export class Auth {
     const hash = scryptSync(password, salt, 32);
     setSetting(this.db, 'username', username);
     setSetting(this.db, 'passwordHash', `${salt.toString('hex')}:${hash.toString('hex')}`);
+  }
+
+  /**
+   * Password check with brute-force protection (per IP and overall).
+   * Returns retryAfter (seconds) when the caller is temporarily locked out.
+   */
+  attempt(username: string, password: string, ip: string): { ok: true } | { ok: false; retryAfter: number } {
+    const wait = this.limiter.retryAfter(ip);
+    if (wait > 0) return { ok: false, retryAfter: wait };
+    if (this.checkPassword(username, password)) {
+      this.limiter.succeed(ip);
+      return { ok: true };
+    }
+    this.limiter.fail(ip);
+    return { ok: false, retryAfter: 0 };
   }
 
   checkPassword(username: string, password: string): boolean {

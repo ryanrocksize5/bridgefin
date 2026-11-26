@@ -4,6 +4,7 @@
   "description": "Lightweight server that exposes Stremio addons (with TorBox) through the Jellyfin API for Infuse and Swiftfin.",
   "type": "module",
   "private": true,
+  "license": "MIT",
   "engines": {
     "node": ">=24"
   },

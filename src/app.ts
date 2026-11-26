@@ -41,6 +41,7 @@ export interface App {
 }
 
 export function createApp(cfg: Config, opts: { fetchImpl?: typeof fetch } = {}): App {
+  trustProxy = cfg.trustProxy;
   const db = openDb(cfg.dbPath);
   let serverId = getSetting(db, 'serverId');
   if (!serverId) {
@@ -54,7 +55,7 @@ export function createApp(cfg: Config, opts: { fetchImpl?: typeof fetch } = {}):
   }
   const ids = new Ids(db);
   const auth = new Auth(db);
-  auth.init(cfg.username, cfg.password);
+  auth.init(cfg.username, cfg.password, cfg.resetPassword);
   const library = new Library(db);
   const addons = new AddonService(db, new AddonHttp(cfg.addonTimeoutMs));
   if (cfg.torboxApiKey && !getSetting(db, 'torboxApiKey')) setSetting(db, 'torboxApiKey', cfg.torboxApiKey);
@@ -98,10 +99,19 @@ async function readBody(req: IncomingMessage): Promise<any> {
   }
 }
 
+let trustProxy = false;
+
+/**
+ * Client address. X-Forwarded-For is only believed when TRUST_PROXY is set (Bridgefin
+ * behind a reverse proxy); otherwise anyone could fake it to dodge the login limiter.
+ */
 export function clientIp(req: IncomingMessage): string {
-  const xf = req.headers['x-forwarded-for'];
-  const first = (Array.isArray(xf) ? xf[0] : xf)?.split(',')[0]?.trim();
-  return first || req.socket.remoteAddress || '';
+  if (trustProxy) {
+    const xf = req.headers['x-forwarded-for'];
+    const first = (Array.isArray(xf) ? xf[0] : xf)?.split(',')[0]?.trim();
+    if (first) return first;
+  }
+  return req.socket.remoteAddress || '';
 }
 
 /** Properties whose values are dictionaries: Jellyfin keeps their keys as-is in camelCase mode. */

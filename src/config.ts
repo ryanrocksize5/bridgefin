@@ -29,6 +29,10 @@ export interface Config {
   /** Version reported to clients. Swiftfin/Infuse check this. */
   jellyfinVersion: string;
   addonTimeoutMs: number;
+  /** Believe X-Forwarded-For (only when running behind your own reverse proxy). */
+  trustProxy: boolean;
+  /** Replace the stored login with BRIDGEFIN_USERNAME/PASSWORD at startup (forgotten password). */
+  resetPassword: boolean;
 }
 
 export function loadConfig(overrides: Partial<Config> = {}): Config {
@@ -49,6 +53,8 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     // Swiftfin warns below 12.1; Infuse 8.5.6+ supports 12.x.
     jellyfinVersion: env('JELLYFIN_VERSION', '12.4.0'),
     addonTimeoutMs: envInt('ADDON_TIMEOUT_MS', 15000),
+    trustProxy: /^(1|true|yes)$/i.test(env('TRUST_PROXY')),
+    resetPassword: /^(1|true|yes)$/i.test(env('BRIDGEFIN_RESET_PASSWORD')),
     ...overrides,
   };
   return cfg;

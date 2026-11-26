@@ -22,7 +22,7 @@ want something **very lightweight** that does only this job.
   IMDb/TMDB ids (Infuse enriches from these itself).
 - Series → seasons → episodes.
 - Stream picker: every cached TorBox stream for a title is one Jellyfin "version",
-  labelled like Stremio (`4K HDR · 18.2 GB · Torrentio`), best first.
+  labelled like Stremio (`4K HDR · 18.2 GB · MyAddon`), best first.
 - Playback by direct play only — no transcoding, no ffmpeg.
 - Subtitles from subtitle addons (e.g. OpenSubtitles v3) as external tracks.
 - Favorites = Stremio library (add/remove).
@@ -53,7 +53,7 @@ want something **very lightweight** that does only this job.
 - No iPhone/Infuse available during development: compatibility is checked against a real
   Jellyfin 10.11 server's responses (captured in Docker) and against jellyfin-web.
 - No TorBox key or Stremio login during development: TorBox is mocked in tests; Cinemeta
-  and plain Torrentio are public and used live.
+  are public and used live.
 - Node 24 (built-in `node:sqlite`, native TypeScript type-stripping) — pinned in Docker.
 
 ## Approaches considered

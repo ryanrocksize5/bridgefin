@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { App } from '../app.ts';
+import { clientIp } from '../app.ts';
 import { getJsonSetting, getSetting, setJsonSetting, setSetting } from '../db.ts';
 import type { Ctx } from '../http/router.ts';
 import { log } from '../log.ts';
@@ -43,8 +44,14 @@ export function registerAdminRoutes(app: App): void {
 
   r.post('/admin/login', (c) => {
     const b = c.body ?? {};
-    if (!app.auth.checkPassword(String(b.username ?? ''), String(b.password ?? ''))) {
-      log.warn('settings page: failed sign-in');
+    const ip = clientIp(c.req);
+    const result = app.auth.attempt(String(b.username ?? ''), String(b.password ?? ''), ip);
+    if (!result.ok) {
+      if (result.retryAfter > 0) {
+        log.warn(`settings page: sign-in locked out for ${ip}`);
+        return html(c, loginPage(`Too many failed attempts. Try again in ${Math.ceil(result.retryAfter / 60)} minutes.`), 429);
+      }
+      log.warn(`settings page: failed sign-in from ${ip}`);
       return html(c, loginPage('That username and password did not match.'), 401);
     }
     const token = app.auth.issueToken({ client: 'Bridgefin settings', device: 'Browser', deviceId: ADMIN_DEVICE, version: '1' });
@@ -163,7 +170,8 @@ async function doAction(app: App, b: Record<string, string>, ownToken: string): 
       sync.setWriteBack(b.on === '1');
       return b.on === '1' ? 'Changes made here will now be sent to Stremio.' : 'Changes stay on this server only.';
     case 'password': {
-      if (!app.auth.checkPassword(app.auth.username(), b.current ?? '')) throw new Error('Current password is wrong.');
+      const check = app.auth.attempt(app.auth.username(), b.current ?? '', `settings:${ownToken.slice(0, 8)}`);
+      if (!check.ok) throw new Error(check.retryAfter ? 'Too many wrong attempts. Try again later.' : 'Current password is wrong.');
       const user = (b.username ?? '').trim() || app.auth.username();
       if ((b.newpass ?? '').length < 6) throw new Error('New password needs at least 6 characters.');
       app.auth.setCredentials(user, b.newpass);
@@ -230,7 +238,7 @@ ${act('addon_toggle', { id: a.id, anchor: 'addons' }, a.enabled ? 'Turn off' : '
     .join('');
   const addonsWarn = !streamAddons.length;
   const addonsSection = `<section class="stage${addonsWarn ? ' warn' : ''}" id="addons"><header><h2>Addons</h2>
-<p class="state">${addonsWarn ? 'No addon gives streams yet. Add Torrentio, or any addon you use in Stremio.' : `${installed.length} installed, ${streamAddons.length} giving streams. Earlier addons are asked first for details.`}</p></header>
+<p class="state">${addonsWarn ? 'No addon gives streams yet. Paste the manifest link of a stream addon you use in Stremio, or link your Stremio account to import them.' : `${installed.length} installed, ${streamAddons.length} giving streams. Earlier addons are asked first for details.`}</p></header>
 <div class="panel"><ul class="rows">${addonRows || '<li class="muted">No addons yet.</li>'}</ul></div>
 <div class="panel"><form method="post" action="/admin/do"><input type="hidden" name="action" value="addon_install"><input type="hidden" name="anchor" value="addons">
 <label for="addon-url">Install from a manifest link</label>

@@ -20,7 +20,7 @@ playback starts straight away.
 | Your library | **My Movies** and **My Shows**. Favorite a title to add it |
 | Search | Searches every addon that supports search |
 | Title page (poster, plot, cast, rating, trailer) | Details page, with IMDb/TMDB ids so Infuse adds its own artwork |
-| Stream picker | **Versions**, e.g. `4K DV · REMUX · HEVC · Atmos · 58.0 GB · Torrentio`, best first |
+| Stream picker | **Versions**, e.g. `4K DV · REMUX · HEVC · Atmos · 58.0 GB · MyAddon`, best first |
 | Subtitles addons (OpenSubtitles) | Extra subtitle tracks, on top of those inside the file |
 | Continue watching, watched marks | Resume points, watched marks, **Continue Watching** and **Next Up** |
 | New episodes of shows you follow | **Latest** row under My Shows, and upcoming episodes |
@@ -43,15 +43,22 @@ docker compose up -d --build
 Open `http://<that machine's IP>:8096/admin`, sign in with `admin` and your password, then:
 
 1. **Streams**: paste your TorBox API key (torbox.app → Settings → API key).
-2. **Addons**: press **Add Torrentio**, or paste any addon manifest link you use in Stremio.
-   Bridgefin checks raw torrent results against your TorBox cache itself, so plain Torrentio
-   works. Addon links already configured with your TorBox key also work.
+2. **Addons**: Bridgefin starts with only Cinemeta (catalogs and details) and OpenSubtitles.
+   Paste the manifest link of each stream addon you use in Stremio, or link your Stremio
+   account (step 4) to import them all.
+   - Addons that return raw torrent results work: Bridgefin checks them against your TorBox
+     cache itself.
+   - Addon links already configured with your TorBox key work too.
 3. **Libraries**: pick which catalogs show up as libraries (Cinemeta's Popular and Featured
    are on by default).
 4. Optional, **Stremio account**: link it to import your addons, library and progress.
 
-If you leave `BRIDGEFIN_PASSWORD` empty, a password is generated on first start and printed
-once in the logs (`docker compose logs bridgefin`).
+`BRIDGEFIN_PASSWORD` only sets the **first** login. After that, change it on the settings page;
+restarts won't undo your change.
+- If you leave it empty, a password is generated on first start and printed once in the logs
+  (`docker compose logs bridgefin`).
+- **Forgot your password?** Start once with `BRIDGEFIN_RESET_PASSWORD: "1"` and a new
+  `BRIDGEFIN_PASSWORD`, then remove the reset line. This also signs out every device.
 
 ### Connect from Infuse
 
@@ -74,7 +81,18 @@ reach it outside your home network, pick one:
 - **Tailscale** (simplest): install it on the server and the iPhone, then use the server's
   Tailscale address in Infuse.
 - **A VPS or reverse proxy**: put Bridgefin behind HTTPS (Caddy, Nginx, Cloudflare Tunnel) and
-  use a strong password.
+  use a strong password. Set `TRUST_PROXY: "1"` so login protection sees real client addresses.
+
+### Security notes
+
+- **Login protection:** after 10 failed logins from one address (or 100 overall), logins are
+  refused for 15 minutes. This covers apps and the settings page.
+- **Don't expose plain HTTP to the internet.** Passwords and tokens would travel unencrypted.
+  Use Tailscale or an HTTPS reverse proxy.
+- **Only set `TRUST_PROXY` behind your own proxy.** Otherwise anyone could fake their address
+  and get around login protection.
+- **What Bridgefin stores:** your TorBox key and Stremio sign-in key, in its database in the
+  Docker volume. Your Stremio password is never stored.
 
 ## How playback works
 
@@ -108,7 +126,9 @@ reach it outside your home network, pick one:
 | Variable | Default | |
 |---|---|---|
 | `BRIDGEFIN_USERNAME` | `admin` | Login for apps and the settings page |
-| `BRIDGEFIN_PASSWORD` | generated | Applied at every start when set |
+| `BRIDGEFIN_PASSWORD` | generated | First login only (see above) |
+| `BRIDGEFIN_RESET_PASSWORD` | | `1` = replace the saved login with the two above, once |
+| `TRUST_PROXY` | | `1` only behind your own reverse proxy |
 | `TORBOX_API_KEY` | | Can also be set on the settings page |
 | `PLAYBACK_MODE` | `redirect` | `redirect` or `proxy` |
 | `PORT` | `8096` | |
@@ -158,3 +178,16 @@ still need confirming on a device:
 - Infuse Library Mode with large show catalogs: the first sync fetches details for every show
   in each catalog, so it can be slow
 - Real TorBox resolution and Stremio account sync with a live account
+
+## Disclaimer
+
+Bridgefin contains no media and no addons that provide media. It only connects apps that
+speak the Jellyfin API to Stremio addons and a debrid account that **you** choose and
+configure. You are responsible for the addons you install and for making sure your use
+complies with the laws where you live and with the terms of the services you use.
+
+Bridgefin is not affiliated with Jellyfin, Stremio, TorBox, Firecore (Infuse) or Swiftfin.
+
+## License
+
+[MIT](LICENSE)

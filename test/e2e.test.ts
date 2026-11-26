@@ -357,7 +357,7 @@ describe('Jellyfin API', () => {
 
   test('Swiftfin-style unquoted auth header with spaces, repeated fields params, bitrate test', async () => {
     const res = await fetch(`${B}/Users/Me`, {
-      headers: { authorization: `MediaBrowser DeviceId=abc-1, Device=Ryan's iPhone 15, Client=Swiftfin iOS, Version=1.7.1, Token=${token}` },
+      headers: { authorization: `MediaBrowser DeviceId=abc-1, Device=Alex's iPhone 15, Client=Swiftfin iOS, Version=1.7.1, Token=${token}` },
     });
     assert.equal(res.status, 200);
     const me = await res.json();

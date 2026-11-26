@@ -12,7 +12,6 @@ export const DEFAULT_ADDONS = [
 
 /** Well known addons offered as one-click installs on the settings page. */
 export const SUGGESTED_ADDONS: { name: string; url: string; note: string }[] = [
-  { name: 'Torrentio', url: 'https://torrentio.strem.fun/manifest.json', note: 'Torrent results; Bridgefin checks TorBox cache itself' },
   { name: 'Cinemeta', url: 'https://v3-cinemeta.strem.io/manifest.json', note: 'Official metadata & catalogs' },
   { name: 'OpenSubtitles v3', url: 'https://opensubtitles-v3.strem.io/manifest.json', note: 'Subtitles' },
 ];

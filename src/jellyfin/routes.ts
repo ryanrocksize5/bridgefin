@@ -81,8 +81,16 @@ export function registerJellyfinRoutes(app: App): void {
     const body = c.body ?? {};
     const username = String(body.Username ?? body.username ?? '');
     const pw = String(body.Pw ?? body.pw ?? body.Password ?? body.password ?? '');
-    if (!app.auth.checkPassword(username, pw)) {
-      log.warn(`failed login for "${username}" from ${clientIp(c.req)} (${c.auth.client ?? '?'})`);
+    const ip = clientIp(c.req);
+    const result = app.auth.attempt(username, pw, ip);
+    if (!result.ok) {
+      if (result.retryAfter > 0) {
+        log.warn(`login locked out for ${ip} (${result.retryAfter}s left)`);
+        c.res.writeHead(429, { 'retry-after': String(result.retryAfter), 'content-type': 'text/plain' });
+        c.res.end('Too many failed logins. Try again later.');
+        return;
+      }
+      log.warn(`failed login for "${username}" from ${ip} (${c.auth.client ?? '?'})`);
       throw new HttpError(401, 'Invalid username or password');
     }
     const token = app.auth.issueToken(c.auth);

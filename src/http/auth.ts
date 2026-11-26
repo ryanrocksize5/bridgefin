@@ -4,7 +4,7 @@ import type { AuthInfo } from './router.ts';
 /**
  * Parses the Jellyfin/Emby auth header family, the way Jellyfin's AuthorizationContext does:
  *   Authorization: MediaBrowser Client="Infuse", Device="iPhone", DeviceId="x", Version="8", Token="t"
- *   Authorization: MediaBrowser DeviceId=abc, Device=Ryan's iPhone, Client=Swiftfin iOS, Version=1.7.1, Token=t
+ *   Authorization: MediaBrowser DeviceId=abc, Device=Alex's iPhone, Client=Swiftfin iOS, Version=1.7.1, Token=t
  *   X-Emby-Authorization: (same format)
  *   X-Emby-Token / X-MediaBrowser-Token: <token>
  *   ?ApiKey= / ?api_key=

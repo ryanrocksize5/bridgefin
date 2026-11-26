@@ -10,6 +10,8 @@ services:
       # Login used by Infuse / Swiftfin and the settings page (/admin).
       BRIDGEFIN_USERNAME: admin
       BRIDGEFIN_PASSWORD: change-me
+      # BRIDGEFIN_PASSWORD only sets the FIRST login; change it later on the settings page.
+      # Forgot it? Add  BRIDGEFIN_RESET_PASSWORD: "1"  for one start, then remove it.
       # Optional here; you can also paste it on the settings page.
       TORBOX_API_KEY: ""
       # redirect = players fetch video straight from TorBox (no server bandwidth)
