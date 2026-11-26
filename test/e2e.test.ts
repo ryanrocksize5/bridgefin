@@ -79,6 +79,15 @@ const mock = http.createServer((req, res) => {
     });
   if (p === '/stream/series/tt0000002:1:2.json')
     return json({ streams: [{ name: 'TestAddon\n1080p', title: 'Mock.Show.S01.1080p.mkv', infoHash: HASH_EP }] });
+  if (p === '/stream/series/tt0000002:1:1.json' || p === '/stream/series/tt0000002:2:1.json') {
+    const ep = p.includes(':2:1') ? 's2e1' : 's1e1';
+    return json({
+      streams: [
+        { name: 'TestAddon\n2160p', title: `Mock.Show.${ep}.2160p.WEB-DL.mkv`, url: `${mockBase}/resolve/${ep}-4k`, behaviorHints: { bingeGroup: 'grp-4k' } },
+        { name: 'TestAddon\n720p', title: `Mock.Show.${ep}.720p.WEBRip.mkv`, url: `${mockBase}/resolve/${ep}-sd`, behaviorHints: { bingeGroup: 'grp-720' } },
+      ],
+    });
+  }
   if (p.startsWith('/stream/')) return json({ streams: [] });
   if (p.startsWith('/subtitles/')) return json({ subtitles: [{ id: 's1', url: `${mockBase}/sub/1.srt`, lang: 'eng' }, { id: 's2', url: `${mockBase}/sub/2.srt`, lang: 'fre' }] });
   if (p.startsWith('/resolve/')) {
@@ -361,6 +370,46 @@ describe('Jellyfin API', () => {
     const bt = await api('/Playback/BitrateTest?size=1000', { raw: true });
     assert.equal(bt.status, 200);
     assert.equal((await bt.arrayBuffer()).byteLength, 1000);
+  });
+
+  test('resume keeps the version you were watching (listed first, used by default)', async () => {
+    const pb = await api(`/Items/${movieId}/PlaybackInfo`);
+    const best = pb.MediaSources[0];
+    const other = pb.MediaSources[1];
+    assert.notEqual(best.Id, other.Id);
+    // Play the second-ranked version.
+    const r1 = await api(`/Videos/${movieId}/stream?static=true&MediaSourceId=${other.Id}`, { raw: true });
+    assert.equal(r1.status, 302);
+    // Swiftfin resumes with item.MediaSources.first → must now be the version just played.
+    const item = await api(`/Items/${movieId}`);
+    assert.equal(item.MediaSources[0].Id, other.Id);
+    const pb2 = await api(`/Items/${movieId}/PlaybackInfo`, { method: 'POST', body: '{}' });
+    assert.equal(pb2.MediaSources[0].Id, other.Id);
+    // A request without a version (or with the placeholder) also plays it.
+    const r2 = await api(`/Videos/${movieId}/stream?static=true`, { raw: true });
+    assert.equal(r2.headers.get('location'), r1.headers.get('location'));
+    // Choosing a different version explicitly switches the remembered one.
+    await api(`/Videos/${movieId}/stream?static=true&MediaSourceId=${best.Id}`, { raw: true });
+    assert.equal((await api(`/Items/${movieId}`)).MediaSources[0].Id, best.Id);
+  });
+
+  test('next episode prefers the same release (Stremio binge group)', async () => {
+    const views = await api('/UserViews');
+    const shows = views.Items.find((i: any) => i.Name === 'Top Shows');
+    const series = (await api(`/Items?ParentId=${shows.Id}`)).Items[0];
+    const seasons = await api(`/Shows/${series.Id}/Seasons`);
+    const s1 = await api(`/Shows/${series.Id}/Episodes?SeasonId=${seasons.Items[0].Id}`);
+    const s2 = await api(`/Shows/${series.Id}/Episodes?SeasonId=${seasons.Items[1].Id}`);
+    const ep1 = s1.Items[0].Id;
+    const next = s2.Items[0].Id;
+    // Without history, the 4K release ranks first.
+    assert.match((await api(`/Items/${next}/PlaybackInfo`)).MediaSources[0].Name, /^4K/);
+    // Watch the 720p release of S01E01…
+    const pb = await api(`/Items/${ep1}/PlaybackInfo`);
+    const sd = pb.MediaSources.find((m: any) => m.Name.startsWith('720p'));
+    await api(`/Videos/${ep1}/stream?static=true&MediaSourceId=${sd.Id}`, { raw: true });
+    // …and S02E01 now offers the same 720p release first.
+    assert.match((await api(`/Items/${next}/PlaybackInfo`)).MediaSources[0].Name, /^720p/);
   });
 
   test('camelCase profile like Jellyfin (dictionary keys untouched)', async () => {

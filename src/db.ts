@@ -61,6 +61,14 @@ CREATE TABLE IF NOT EXISTS sources (
 );
 CREATE INDEX IF NOT EXISTS sources_item ON sources(item_key);
 CREATE TABLE IF NOT EXISTS images (tag TEXT PRIMARY KEY, url TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS last_source (
+  item_key TEXT PRIMARY KEY,     -- version last played for this movie/episode
+  source_id TEXT NOT NULL,
+  binge_group TEXT,
+  parent_key TEXT,               -- series key for episodes (binge group lookup)
+  at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS last_source_parent ON last_source(parent_key, at);
 CREATE TABLE IF NOT EXISTS previews (key TEXT PRIMARY KEY, json TEXT NOT NULL, at INTEGER NOT NULL);
 `;
 

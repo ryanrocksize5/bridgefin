@@ -215,7 +215,8 @@ export class Playback {
     for (const c of ordered.slice(0, 3)) {
       try {
         const url = await this.streams.resolve(c, clientIp);
-        log.info(`play ${c.label}`);
+        log.info(`play ${c.label}${mediaSourceId ? '' : ' (no version requested)'}`);
+        this.streams.recordPlayed(c);
         if (this.mode() === 'proxy' || c.proxyHeaders) {
           await proxy(req, res, url, c.proxyHeaders, () => this.streams.forgetLink(c.id));
         } else {

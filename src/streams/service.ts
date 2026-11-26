@@ -7,6 +7,7 @@ import type { Stream, Subtitle } from '../stremio/types.ts';
 import { Torbox, TorboxError } from '../torbox.ts';
 import { parseStream, versionLabel, type StreamInfo } from './parse.ts';
 import { TtlCache } from '../util/ttl-cache.ts';
+import { keys, parseKey } from '../ids.ts';
 
 export interface StreamPrefs {
   maxResolution: number; // 0 = no limit
@@ -37,6 +38,8 @@ export interface StreamCandidate {
   id: string; // 32-hex media source id
   /** Placeholder meaning "best available at play time". */
   auto?: boolean;
+  /** Stremio behaviorHints.bingeGroup: same value = same release across episodes. */
+  bingeGroup?: string;
   itemKey: string;
   addonId: string;
   addonName: string;
@@ -138,14 +141,54 @@ export class StreamService {
         sizeBytes: info.sizeBytes,
         info,
         proxyHeaders: s.behaviorHints?.proxyHeaders?.request,
+        bingeGroup: s.behaviorHints?.bingeGroup,
       });
     }
 
     sortCandidates(out, prefs);
-    const final = out.slice(0, Math.max(1, prefs.maxResults));
+    const final = this.applyPreference(itemKey, out).slice(0, Math.max(1, prefs.maxResults));
     this.remember(final);
     this.warm.set(itemKey, final);
     return final;
+  }
+
+  /**
+   * Like Stremio: the version you last played for this title comes first (so resuming
+   * plays the same file), and for episodes the release you were bingeing (same
+   * bingeGroup) comes first.
+   */
+  applyPreference(itemKey: string, list: StreamCandidate[]): StreamCandidate[] {
+    const last = this.db.prepare('SELECT source_id FROM last_source WHERE item_key = ?').get(itemKey) as { source_id: string } | undefined;
+    if (last) {
+      const i = list.findIndex((c) => c.id === last.source_id);
+      if (i >= 0) return [list[i], ...list.filter((_, k) => k !== i)];
+      const stored = this.source(last.source_id);
+      // Still offered even if the addon didn't return it this time (links resolve fresh).
+      if (stored && !stored.auto) return [stored, ...list];
+    }
+    const k = parseKey(itemKey);
+    if (k.kind === 'episode') {
+      const binge = this.db
+        .prepare('SELECT binge_group FROM last_source WHERE parent_key = ? AND binge_group IS NOT NULL ORDER BY at DESC LIMIT 1')
+        .get(keys.series(k.stremioId!)) as { binge_group: string } | undefined;
+      if (binge) {
+        const i = list.findIndex((c) => c.bingeGroup === binge.binge_group);
+        if (i > 0) return [list[i], ...list.filter((_, n) => n !== i)];
+      }
+    }
+    return list;
+  }
+
+  /** Called when a version actually starts playing. */
+  recordPlayed(c: StreamCandidate): void {
+    const k = parseKey(c.itemKey);
+    const parent = k.kind === 'episode' ? keys.series(k.stremioId!) : null;
+    this.db
+      .prepare(
+        `INSERT INTO last_source (item_key, source_id, binge_group, parent_key, at) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(item_key) DO UPDATE SET source_id = excluded.source_id, binge_group = excluded.binge_group, at = excluded.at`,
+      )
+      .run(c.itemKey, c.id, c.bingeGroup ?? null, parent, Date.now());
   }
 
   /**
@@ -172,7 +215,8 @@ export class StreamService {
 
   /** Candidates computed in the last 30 minutes, without any network calls. */
   peek(itemKey: string): StreamCandidate[] | undefined {
-    return this.warm.get(itemKey);
+    const list = this.warm.get(itemKey);
+    return list ? this.applyPreference(itemKey, list) : undefined;
   }
 
   private remember(list: StreamCandidate[]): void {
