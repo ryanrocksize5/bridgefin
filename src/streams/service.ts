@@ -14,7 +14,10 @@ export interface StreamPrefs {
   minResolution: number;
   excludeCam: boolean;
   excludeKeywords: string[];
+  /** Upper bound on versions listed overall. */
   maxResults: number;
+  /** Versions kept per quality tier (4K, 1440p, 1080p, 720p, SD, unknown); 0 = no limit. */
+  perQuality: number;
   sort: 'quality' | 'size_desc' | 'size_asc';
   /** Keep url streams whose cache state is unknown (addon did not mark them). */
   includeUnknownCache: boolean;
@@ -27,7 +30,8 @@ export const DEFAULT_PREFS: StreamPrefs = {
   minResolution: 0,
   excludeCam: true,
   excludeKeywords: [],
-  maxResults: 20,
+  maxResults: 50,
+  perQuality: 5,
   sort: 'quality',
   includeUnknownCache: true,
   subtitleLanguages: [],
@@ -146,7 +150,8 @@ export class StreamService {
     }
 
     sortCandidates(out, prefs);
-    const final = this.applyPreference(itemKey, out).slice(0, Math.max(1, prefs.maxResults));
+    // The version you last played survives the limits (applyPreference re-adds it).
+    const final = this.applyPreference(itemKey, limitPerQuality(out, prefs.perQuality)).slice(0, Math.max(1, prefs.maxResults));
     this.remember(final);
     this.warm.set(itemKey, final);
     return final;
@@ -292,6 +297,18 @@ export function passesPrefs(info: StreamInfo, s: Stream, p: StreamPrefs): boolea
     if (p.excludeKeywords.some((k) => k && text.includes(k.toLowerCase()))) return false;
   }
   return true;
+}
+
+/** Keeps the first `n` candidates of each quality tier, preserving order. */
+export function limitPerQuality(list: StreamCandidate[], n: number): StreamCandidate[] {
+  if (!n || n <= 0) return list;
+  const counts = new Map<number, number>();
+  return list.filter((c) => {
+    const tier = c.info.resolution || 0;
+    const seen = counts.get(tier) ?? 0;
+    counts.set(tier, seen + 1);
+    return seen < n;
+  });
 }
 
 export function sortCandidates(list: StreamCandidate[], p: StreamPrefs): void {

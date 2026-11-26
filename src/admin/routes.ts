@@ -129,6 +129,7 @@ async function doAction(app: App, b: Record<string, string>, ownToken: string): 
         excludeCam: b.excludeCam === '1',
         excludeKeywords: (b.excludeKeywords ?? '').split(',').map((s) => s.trim()).filter(Boolean),
         maxResults: Math.min(100, Math.max(1, Number(b.maxResults) || DEFAULT_PREFS.maxResults)),
+        perQuality: Math.min(50, Math.max(0, Number.isFinite(Number(b.perQuality)) && b.perQuality !== '' ? Number(b.perQuality) : DEFAULT_PREFS.perQuality)),
         sort: (['quality', 'size_desc', 'size_asc'].includes(b.sort) ? b.sort : 'quality') as StreamPrefs['sort'],
         includeUnknownCache: b.includeUnknownCache === '1',
         subtitleLanguages: (b.subtitleLanguages ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
@@ -274,7 +275,9 @@ ${browsable ? act('catalog_toggle', { ...f, on: x.enabled ? 0 : 1 }, x.enabled ?
 <div class="grid2"><div><label for="maxResolution">Highest quality</label>${sel('maxResolution', prefs.maxResolution, res)}</div>
 <div><label for="minResolution">Lowest quality</label>${sel('minResolution', prefs.minResolution, res)}</div>
 <div><label for="sort">Put first</label>${sel('sort', prefs.sort, [['quality', 'Best quality'], ['size_asc', 'Smallest file'], ['size_desc', 'Largest file']])}</div>
-<div><label for="maxResults">Versions to list</label><input id="maxResults" name="maxResults" type="number" min="1" max="100" value="${prefs.maxResults}"></div></div>
+<div><label for="perQuality">Versions per quality</label><input id="perQuality" name="perQuality" type="number" min="0" max="50" value="${prefs.perQuality}"></div>
+<div><label for="maxResults">Most versions in total</label><input id="maxResults" name="maxResults" type="number" min="1" max="100" value="${prefs.maxResults}"></div></div>
+<p class="muted">For example 3 per quality lists up to 3 at 4K, 3 at 1080p, 3 at 720p, and so on. 0 means no limit per quality.</p>
 <label for="excludeKeywords">Hide results containing (comma separated)</label><input id="excludeKeywords" name="excludeKeywords" type="text" value="${esc(prefs.excludeKeywords.join(', '))}" placeholder="e.g. 3D, HDTS, dubbed">
 <label class="inline"><input type="checkbox" name="excludeCam" value="1"${prefs.excludeCam ? ' checked' : ''}> Hide cinema recordings (CAM, TS)</label>
 <label class="inline"><input type="checkbox" name="includeUnknownCache" value="1"${prefs.includeUnknownCache ? ' checked' : ''}> Keep direct links that don't say whether they're cached</label>
