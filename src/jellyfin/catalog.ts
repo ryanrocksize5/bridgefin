@@ -8,6 +8,7 @@ import {
   episodeDto,
   episodeNumberOf,
   isReleased,
+  isoDate,
   movieDto,
   seasonDto,
   seasonNumbers,
@@ -176,7 +177,7 @@ export class Catalog {
         ({ id: k.stremioId!, type, name: r.name, poster: r.poster ?? undefined } as Meta);
       const dto = this.metaToDto({ ...m, type }, parentId);
       if (dto) {
-        dto.DateCreated = new Date(r.added_at).toISOString();
+        dto.DateCreated = isoDate(r.added_at);
         out.push(dto);
       }
     }
@@ -188,6 +189,56 @@ export class Catalog {
     if (!ref) return [];
     const ex = (ref.def.extra ?? []).find((e) => e.name === 'genre');
     return ex?.options ?? ref.def.genres ?? [];
+  }
+
+  /** Stremio ids of the series shown in a view (library or catalog). */
+  async viewSeriesIds(view: ViewInfo): Promise<string[]> {
+    if (view.key === VIEW_LIB_SERIES) return this.library.libraryItems('series').map((r) => parseKey(r.key).stremioId!);
+    if (view.catalog && view.catalog.def.type === 'series') {
+      const all = await this.addons.catalogAll(view.catalog, this.catalogLimit);
+      this.rememberPreviews(all);
+      return all.map((m) => m.id);
+    }
+    return [];
+  }
+
+  /**
+   * Infuse Library Mode asks for every Season/Episode under a library and hides all shows
+   * if none come back, so this walks every series (metadata is cached in SQLite).
+   */
+  async viewChildren(view: ViewInfo, kind: 'season' | 'episode'): Promise<any[]> {
+    const ids = await this.viewSeriesIds(view);
+    const out: any[][] = new Array(ids.length);
+    let i = 0;
+    await mapLimit(
+      ids.map((id) => ({ id, idx: i++ })),
+      6,
+      async ({ id, idx }) => {
+        out[idx] = kind === 'season' ? await this.seasons(id) : await this.episodes(id);
+      },
+    );
+    return out.flat().filter(Boolean);
+  }
+
+  /** Lookup by provider ids, e.g. "Imdb.tt0111161,Tmdb.278". */
+  async byProviderIds(spec: string, types: string[]): Promise<any[]> {
+    const imdb = new Set<string>();
+    for (const part of spec.split(',')) {
+      const [prov, val] = part.split('.');
+      if (prov?.toLowerCase() === 'imdb' && /^tt\d+$/.test(val ?? '')) imdb.add(val);
+    }
+    const out: any[] = [];
+    for (const id of imdb) {
+      for (const t of ['movie', 'series'] as const) {
+        if (types.length && !types.includes(t === 'movie' ? 'movie' : 'series')) continue;
+        const m = this.addons.cachedMeta(t, id) ?? this.preview(t, id) ?? (await this.addons.meta(t, id).catch(() => undefined));
+        if (m && (m.type === t || !m.type)) {
+          out.push(this.metaToDto({ ...m, type: t }));
+          break;
+        }
+      }
+    }
+    return out.filter(Boolean);
   }
 
   async search(term: string, types: string[]): Promise<any[]> {

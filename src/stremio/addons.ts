@@ -223,13 +223,21 @@ export class AddonService {
    * Returns items [start, start+limit) of a catalog by walking pages.
    * `hardCap` bounds the total so library scans can't walk forever.
    */
+  /**
+   * Returns items [start, start+limit) of a catalog and its exact size (bounded by hardCap).
+   * Infuse reads TotalRecordCount only from the first page, so the total must be exact:
+   * we walk the (cached) pages until the catalog ends or the cap is reached.
+   */
   async catalogSlice(ref: CatalogRef, start: number, limit: number, hardCap: number, extra: Record<string, string> = {}): Promise<{ items: Meta[]; total: number }> {
-    const want = Math.min(start + limit, hardCap);
+    const all = await this.catalogAll(ref, hardCap, extra);
+    return { items: all.slice(start, Math.min(start + limit, all.length)), total: all.length };
+  }
+
+  async catalogAll(ref: CatalogRef, hardCap: number, extra: Record<string, string> = {}): Promise<Meta[]> {
     const all: Meta[] = [];
-    let skip = 0;
-    let exhausted = false;
     const seen = new Set<string>();
-    while (all.length < want) {
+    let skip = 0;
+    while (all.length < hardCap) {
       const page = await this.catalogPage(ref, skip, extra);
       let added = 0;
       for (const m of page) {
@@ -238,16 +246,10 @@ export class AddonService {
         all.push(m);
         added++;
       }
-      if (page.length === 0 || added === 0 || !catalogSupports(ref.def, 'skip')) {
-        exhausted = true;
-        break;
-      }
+      if (page.length === 0 || added === 0 || !catalogSupports(ref.def, 'skip')) break;
       skip += page.length;
     }
-    const items = all.slice(start, want);
-    // When not exhausted, advertise one more page so clients keep paging (until the cap).
-    const total = exhausted ? Math.min(all.length, hardCap) : Math.min(hardCap, Math.max(all.length, want) + (all.length >= want ? 100 : 0));
-    return { items, total };
+    return all.slice(0, hardCap);
   }
 
   async search(query: string, types: string[] = ['movie', 'series']): Promise<Meta[]> {

@@ -201,7 +201,8 @@ export function movieDto(ctx: DtoContext, m: Meta, parentId?: string): any {
   dto.VideoType = 'VideoFile';
   dto.Container = 'mkv';
   dto.IsHD = true;
-  if (parentId) dto.ParentId = parentId;
+  dto.ParentId = parentId ?? ctx.ids.toId('view:library-movies');
+  dto.DisplayPreferencesId = id;
   applyImages(ctx, dto, { primary: m.poster, backdrop: m.background, logo: m.logo, thumb: m.background });
   dto.UserData = userDataDto(id, ctx.library.get(key), ctx.library.isInLibrary(key), rt);
   return dto;
@@ -220,7 +221,8 @@ export function seriesDto(ctx: DtoContext, m: Meta, parentId?: string): any {
   else if (typeof m.releaseInfo === 'string' && /\d{4}[-–]\s*$/.test(m.releaseInfo)) dto.Status = 'Continuing';
   const rt = parseRuntimeTicks(m.runtime);
   if (rt) dto.RunTimeTicks = rt;
-  if (parentId) dto.ParentId = parentId;
+  dto.ParentId = parentId ?? ctx.ids.toId('view:library-series');
+  dto.DisplayPreferencesId = id;
   applyImages(ctx, dto, { primary: m.poster, backdrop: m.background, logo: m.logo, thumb: m.background });
   const eps = (m.videos ?? []).filter((v) => episodeNumberOf(v) !== undefined && (v.season ?? 0) > 0);
   const seasons = new Set(eps.map((v) => v.season));

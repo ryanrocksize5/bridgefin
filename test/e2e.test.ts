@@ -338,9 +338,52 @@ describe('Jellyfin API', () => {
     assert.equal(s.UserData.UnplayedItemCount, 3 - 1);
   });
 
-  test('unknown routes degrade gracefully', async () => {
+  test('unknown routes degrade gracefully (404, list routes empty, never 401)', async () => {
     const r = await api('/Some/Unknown/Thing', { raw: true });
-    assert.equal(r.status, 200);
+    assert.equal(r.status, 404);
+    const l = await api('/Items/Something/Unknown');
+    assert.equal(l.TotalRecordCount, 0);
     assert.ok(app.unhandled.size >= 1);
+  });
+
+  test('Swiftfin-style unquoted auth header with spaces, repeated fields params, bitrate test', async () => {
+    const res = await fetch(`${B}/Users/Me`, {
+      headers: { authorization: `MediaBrowser DeviceId=abc-1, Device=Ryan's iPhone 15, Client=Swiftfin iOS, Version=1.7.1, Token=${token}` },
+    });
+    assert.equal(res.status, 200);
+    const me = await res.json();
+    assert.equal(me.Policy.EnableMediaPlayback, true);
+    assert.ok(me.Policy.AuthenticationProviderId && me.Policy.PasswordResetProviderId);
+    const views = await api('/UserViews');
+    const top = views.Items.find((i: any) => i.Name === 'Top Movies');
+    const items = await api(`/Items?ParentId=${top.Id}&fields=Overview&fields=MediaSources`);
+    assert.ok(items.Items[0].MediaSources?.length >= 1);
+    const bt = await api('/Playback/BitrateTest?size=1000', { raw: true });
+    assert.equal(bt.status, 200);
+    assert.equal((await bt.arrayBuffer()).byteLength, 1000);
+  });
+
+  test('stream without token: only for issued version ids', async () => {
+    const pb = await api(`/Items/${movieId}/PlaybackInfo`);
+    const ok = await fetch(`${B}/Videos/${movieId}/stream?static=true&MediaSourceId=${pb.MediaSources[0].Id}`, { redirect: 'manual' });
+    assert.equal(ok.status, 302);
+    const bare = await fetch(`${B}/Videos/${movieId}/stream?static=true`, { redirect: 'manual' });
+    assert.equal(bare.status, 401);
+    const other = await fetch(`${B}/Videos/${'0'.repeat(32)}/stream?MediaSourceId=${pb.MediaSources[0].Id}`, { redirect: 'manual' });
+    assert.equal(other.status, 401);
+  });
+
+  test('Infuse Library Mode: seasons/episodes under a library, exact totals, provider id lookup', async () => {
+    const views = await api('/UserViews');
+    const shows = views.Items.find((i: any) => i.Name === 'Top Shows');
+    const seasons = await api(`/Users/x/Items?ParentId=${shows.Id}&Recursive=true&IncludeItemTypes=Season`);
+    assert.equal(seasons.TotalRecordCount, 3);
+    const eps = await api(`/Users/x/Items?ParentId=${shows.Id}&Recursive=true&IncludeItemTypes=Episode&ExcludeLocationTypes=Virtual&Fields=MediaSources&StartIndex=0&Limit=200`);
+    assert.equal(eps.TotalRecordCount, 4);
+    const probe = await api(`/Items?ParentId=${shows.Id}&Limit=0`);
+    assert.equal(probe.Items.length, 0);
+    assert.equal(probe.TotalRecordCount, 1);
+    const byId = await api('/Items?AnyProviderIdEquals=Imdb.tt0000001&Recursive=true&IncludeItemTypes=Movie');
+    assert.equal(byId.Items[0]?.Name, 'Mock Movie');
   });
 });

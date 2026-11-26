@@ -65,7 +65,7 @@ export function createApp(cfg: Config, opts: { fetchImpl?: typeof fetch } = {}):
   const catalog = new Catalog(dtoCtx, addons, library, cfg.catalogLimit);
   const playbackMode = (): PlaybackMode => (getSetting(db, 'playbackMode') as PlaybackMode | undefined) ?? cfg.playbackMode;
   const playback = new Playback(catalog, streams, playbackMode);
-  const sync = new StremioSync(db, addons, library);
+  const sync = new StremioSync(db, addons, library, opts.fetchImpl);
   const router = new Router();
   const app: App = {
     cfg, db, ids, auth, library, addons, torbox, streams, catalog, playback, sync,
@@ -121,7 +121,11 @@ export async function handle(app: App, req: IncomingMessage, res: ServerResponse
   const url = new URL(req.url ?? '/', 'http://local');
   const path = url.pathname.replace(PREFIX_RE, '') || '/';
   const query: Record<string, string> = {};
-  for (const [k, v] of url.searchParams) query[k.toLowerCase()] = v;
+  // Keys are case-insensitive; repeated array params (fields=A&fields=B) are joined like comma lists.
+  for (const [k, v] of url.searchParams) {
+    const lk = k.toLowerCase();
+    query[lk] = query[lk] !== undefined && query[lk] !== '' ? `${query[lk]},${v}` : v;
+  }
   const method = (req.method ?? 'GET').toUpperCase();
 
   res.setHeader('access-control-allow-origin', '*');
@@ -140,12 +144,19 @@ export async function handle(app: App, req: IncomingMessage, res: ServerResponse
   try {
     if (!found) {
       recordUnhandled(app, method, path, url.search, String(req.headers['user-agent'] ?? authInfo.client ?? ''));
-      // Harmless empty answer instead of 404 so unknown client features degrade gracefully.
-      if (method === 'GET') sendJson(res, 200, path.toLowerCase().startsWith('/items') || path.toLowerCase().startsWith('/users') ? { Items: [], TotalRecordCount: 0, StartIndex: 0 } : {});
-      else sendJson(res, 204, undefined);
+      // List-shaped routes get an empty list; everything else a 404 (never 401: some clients log out on 401).
+      const lower = path.toLowerCase();
+      if (method === 'GET' && (/\/items(\/|$)/.test(lower) || lower.endsWith('/episodes') || lower.endsWith('/seasons'))) {
+        sendJson(res, 200, { Items: [], TotalRecordCount: 0, StartIndex: 0 });
+      } else if (method === 'POST') sendJson(res, 204, undefined);
+      else {
+        res.writeHead(404, { 'content-type': 'text/plain' });
+        res.end('Not found');
+      }
       return;
     }
-    if (!found.route.public && !app.auth.validToken(authInfo.token)) {
+    const authed = app.auth.validToken(authInfo.token);
+    if (!found.route.public && !authed) {
       throw new HttpError(401, 'Unauthorized');
     }
     const ctx: Ctx = {
@@ -156,7 +167,7 @@ export async function handle(app: App, req: IncomingMessage, res: ServerResponse
       params: found.params,
       query,
       body: await readBody(req),
-      token: authInfo.token,
+      token: authed ? authInfo.token : undefined,
       auth: authInfo,
     };
     const result = await found.route.handler(ctx);

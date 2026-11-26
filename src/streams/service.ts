@@ -6,6 +6,7 @@ import type { AddonService } from '../stremio/addons.ts';
 import type { Stream, Subtitle } from '../stremio/types.ts';
 import { Torbox, TorboxError } from '../torbox.ts';
 import { parseStream, versionLabel, type StreamInfo } from './parse.ts';
+import { TtlCache } from '../util/ttl-cache.ts';
 
 export interface StreamPrefs {
   maxResolution: number; // 0 = no limit
@@ -57,6 +58,7 @@ export class StreamService {
   private addons: AddonService;
   readonly torbox: Torbox;
   private resolving = new Map<string, Promise<string>>();
+  private warm = new TtlCache<StreamCandidate[]>(30 * 60_000, 500);
 
   constructor(db: DB, addons: AddonService, torbox: Torbox) {
     this.db = db;
@@ -139,7 +141,13 @@ export class StreamService {
     sortCandidates(out, prefs);
     const final = out.slice(0, Math.max(1, prefs.maxResults));
     this.remember(final);
+    this.warm.set(itemKey, final);
     return final;
+  }
+
+  /** Candidates computed in the last 30 minutes, without any network calls. */
+  peek(itemKey: string): StreamCandidate[] | undefined {
+    return this.warm.get(itemKey);
   }
 
   private remember(list: StreamCandidate[]): void {

@@ -44,9 +44,10 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     password: env('BRIDGEFIN_PASSWORD', ''),
     torboxApiKey: env('TORBOX_API_KEY', ''),
     playbackMode: mode === 'proxy' ? 'proxy' : 'redirect',
-    catalogLimit: envInt('CATALOG_LIMIT', 200),
+    catalogLimit: envInt('CATALOG_LIMIT', 300),
     logLevel: (env('LOG_LEVEL', 'info') as Config['logLevel']),
-    jellyfinVersion: env('JELLYFIN_VERSION', '10.11.0'),
+    // Swiftfin warns below 12.1; Infuse 8.5.6+ supports 12.x.
+    jellyfinVersion: env('JELLYFIN_VERSION', '12.4.0'),
     addonTimeoutMs: envInt('ADDON_TIMEOUT_MS', 15000),
     ...overrides,
   };

@@ -190,6 +190,8 @@ export function registerJellyfinRoutes(app: App): void {
       Name: i.Name,
       ProductionYear: i.ProductionYear,
       PrimaryImageTag: i.ImageTags?.Primary,
+      ThumbImageTag: i.ImageTags?.Thumb,
+      ThumbImageItemId: i.Id,
       BackdropImageTag: i.BackdropImageTags?.[0],
       BackdropImageItemId: i.Id,
       Type: i.Type,
@@ -309,9 +311,23 @@ export function registerJellyfinRoutes(app: App): void {
   const stream = async (c: Ctx) => {
     const id = normalizeId(c.params.id);
     if (!id) throw new HttpError(404, 'Item not found');
-    await playback.stream(c.req, c.res, id, c.query.mediasourceid, clientIp(c.req));
+    const msid = c.query.mediasourceid ?? c.query.tag;
+    // Infuse sometimes requests streams without a token. Allow that only for version ids
+    // this server issued (unguessable), never for "best available" on a bare item id.
+    if (!c.token) {
+      const src = msid ? app.streams.source(msid.replace(/-/g, '').toLowerCase()) : undefined;
+      if (!src || ids.toId(src.itemKey) !== id) throw new HttpError(401, 'Unauthorized');
+    }
+    await playback.stream(c.req, c.res, id, msid, clientIp(c.req));
   };
-  r.add(['GET', 'HEAD'], ['/Videos/:id/stream', '/Videos/:id/stream.:ext', '/Items/:id/Download', '/Videos/:id/:ignored/stream', '/Videos/:id/:ignored/stream.:ext'], stream);
+  r.add(['GET', 'HEAD'], ['/Videos/:id/stream', '/Videos/:id/stream.:ext', '/Items/:id/Download', '/Videos/:id/:ignored/stream', '/Videos/:id/:ignored/stream.:ext'], stream, { public: true });
+  r.get('/Videos/:id/AdditionalParts', () => queryResult([]));
+  // Swiftfin measures bandwidth before every playback; it fails if this is missing.
+  r.get('/Playback/BitrateTest', (c) => {
+    const size = Math.min(Math.max(int(c.query.size, 500_000), 1), 10_000_000);
+    c.res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': size, 'cache-control': 'no-store' });
+    c.res.end(Buffer.alloc(size));
+  });
   r.get(['/Videos/:id/master.m3u8', '/Videos/:id/main.m3u8'], () => {
     throw new HttpError(400, 'Transcoding is not supported by Bridgefin; enable direct play');
   });
@@ -631,8 +647,14 @@ function withFields(app: App, c: Ctx, items: any[]): any[] {
   if (!wantsField(c, 'MediaSources')) return items;
   for (const it of items) {
     if ((it.Type === 'Movie' || it.Type === 'Episode') && !it.MediaSources) {
-      it.MediaSources = [app.playback.placeholderSource(it.Id, it.RunTimeTicks)];
-      it.MediaStreams = [];
+      // Real versions if they were looked up recently (no network here), else one placeholder
+      // that plays the best version.
+      const key = app.ids.toKey(it.Id);
+      const warm = key ? app.streams.peek(key) : undefined;
+      it.MediaSources = warm?.length
+        ? warm.map((s) => app.playback.mediaSource(it.Id, { itemKey: key!, type: 'movie', videoId: '', runtimeTicks: it.RunTimeTicks }, s, []))
+        : [app.playback.placeholderSource(it.Id, it.RunTimeTicks)];
+      it.MediaStreams = it.MediaSources[0].MediaStreams ?? [];
     }
   }
   return items;
@@ -713,6 +735,12 @@ async function queryItems(app: App, c: Ctx): Promise<any> {
     return queryResult(withFields(app, c, items));
   }
 
+  // Lookup by external ids (Infuse uses AnyProviderIdEquals=Imdb.tt…,Tmdb.…)
+  if (q.anyprovideridequals) {
+    const items = await catalog.byProviderIds(q.anyprovideridequals, typesFrom(q.includeitemtypes));
+    return queryResult(withFields(app, c, items));
+  }
+
   // Search
   if (q.searchterm) {
     if (types.length && !types.some((t) => t === 'movie' || t === 'series')) return queryResult([]);
@@ -743,23 +771,23 @@ async function queryItems(app: App, c: Ctx): Promise<any> {
       const eps = await catalog.episodes(pk.stremioId!, pk.season);
       return page(withFields(app, c, eps), c);
     }
+    const viewInfo = catalog.viewByKey(parentKey);
+    if (viewInfo && types.length && types.every((t) => t === 'episode' || t === 'season')) {
+      // Infuse Library Mode: every season / episode under a library.
+      if (viewInfo.collectionType !== 'tvshows') return queryResult([]);
+      const kind = types.includes('episode') ? 'episode' : 'season';
+      let all = await catalog.viewChildren(viewInfo, kind);
+      if (csv(q.excludelocationtypes).some((t) => t.toLowerCase() === 'virtual')) all = all.filter((i) => i.LocationType !== 'Virtual');
+      return page(withFields(app, c, applyFilters(all, c)), c);
+    }
     if (parentKey === VIEW_LIB_MOVIES || parentKey === VIEW_LIB_SERIES) {
       const isMovies = parentKey === VIEW_LIB_MOVIES;
-      if (!isMovies && types.length && types.every((t) => t === 'episode')) {
-        // Library Mode wants every episode of every followed show.
-        const all: any[] = [];
-        await mapLimit(app.library.libraryItems('series'), 4, async (s) => {
-          all.push(...(await catalog.episodes(parseKey(s.key).stremioId!)));
-        });
-        return page(withFields(app, c, applyFilters(all, c)), c);
-      }
       let items = await catalog.libraryItems(isMovies ? 'movie' : 'series', q.parentid ? normalizeId(q.parentid) : undefined);
       items = sortItems(applyFilters(items, c), sortBy, order);
       return page(withFields(app, c, items), c);
     }
-    const view = catalog.viewByKey(parentKey);
+    const view = viewInfo;
     if (view?.catalog) {
-      if (types.length && types.every((t) => t === 'episode' || t === 'season')) return queryResult([]);
       const start = int(q.startindex, 0);
       const limit = int(q.limit, 100);
       const genre = csv(q.genres?.replace(/\|/g, ','))[0] ?? (q.genreids ? genreName(app, view, q.genreids) : undefined);
