@@ -1,0 +1,28 @@
+services:
+  bridgefin:
+    build: .
+    image: bridgefin:latest
+    container_name: bridgefin
+    restart: unless-stopped
+    ports:
+      - "8096:8096"
+    environment:
+      # Login used by Infuse / Swiftfin and the settings page (/admin).
+      BRIDGEFIN_USERNAME: admin
+      BRIDGEFIN_PASSWORD: change-me
+      # Optional here; you can also paste it on the settings page.
+      TORBOX_API_KEY: ""
+      # redirect = players fetch video straight from TorBox (no server bandwidth)
+      # proxy    = video flows through this server (use if a player refuses redirects)
+      PLAYBACK_MODE: redirect
+      SERVER_NAME: Bridgefin
+      # Max items per catalog library (Infuse reads the full size up front).
+      CATALOG_LIMIT: "300"
+      LOG_LEVEL: info
+    volumes:
+      # Named volume: keeps settings, library and progress across updates.
+      - bridgefin-data:/data
+    mem_limit: 256m
+
+volumes:
+  bridgefin-data:

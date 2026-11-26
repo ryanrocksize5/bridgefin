@@ -30,7 +30,7 @@ export const DEFAULT_PREFS: StreamPrefs = {
   sort: 'quality',
   includeUnknownCache: true,
   subtitleLanguages: [],
-  subtitlesPerLanguage: 3,
+  subtitlesPerLanguage: 2,
 };
 
 export interface StreamCandidate {

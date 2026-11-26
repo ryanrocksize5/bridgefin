@@ -70,6 +70,10 @@ export function registerJellyfinRoutes(app: App): void {
   r.get('/web/*', (c) => redirect(c, '/admin'), { public: true });
   r.get(['/', '/web'], (c) => redirect(c, '/admin'), { public: true });
   r.get('/health', () => 'Healthy', { public: true });
+  r.get(['/favicon.ico', '/robots.txt'], (c) => {
+    c.res.writeHead(c.path.endsWith('.txt') ? 200 : 204, { 'content-type': 'text/plain' });
+    c.res.end(c.path.endsWith('.txt') ? 'User-agent: *\nDisallow: /\n' : undefined);
+  }, { public: true });
 
   // ---------------------------------------------------------------- users & auth
   const userDto = () => userObject(app);

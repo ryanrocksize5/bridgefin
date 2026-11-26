@@ -3,7 +3,7 @@ import type { App } from '../app.ts';
 import { getJsonSetting, getSetting, setJsonSetting, setSetting } from '../db.ts';
 import type { Ctx } from '../http/router.ts';
 import { log } from '../log.ts';
-import { catalogBrowsable, catalogSupports, SUGGESTED_ADDONS } from '../stremio/addons.ts';
+import { catalogBlocker, catalogBrowsable, catalogSupports, SUGGESTED_ADDONS } from '../stremio/addons.ts';
 import { addonSupports } from '../stremio/addon-client.ts';
 import { DEFAULT_PREFS, type StreamPrefs } from '../streams/service.ts';
 import { act, esc, layout, loginPage } from './page.ts';
@@ -250,7 +250,7 @@ ${suggestions ? `<div class="suggest">${suggestions}</div>` : ''}
       const kind = x.def.type === 'movie' ? 'Movies' : 'Shows';
       const extras = [catalogSupports(x.def, 'genre') ? 'genres' : '', catalogSupports(x.def, 'search') ? 'search' : ''].filter(Boolean).join(', ');
       const f = { addon: x.addon.id, type: x.def.type, cid: x.def.id, anchor: 'libraries' };
-      return `${group}<li class="${x.enabled ? '' : 'off'}"><div class="who"><strong>${esc(x.def.name ?? x.def.id)} ${kind}</strong><small>${browsable ? (extras ? `Supports ${extras}` : '') : 'Needs a search term, so it can only be used for search'}</small></div>
+      return `${group}<li class="${x.enabled ? '' : 'off'}"><div class="who"><strong>${esc(x.def.name ?? x.def.id)} ${kind}</strong><small>${browsable ? (extras ? `Supports ${extras}` : '') : esc(catalogBlocker(x.def) ?? '')}</small></div>
 <div class="acts">${x.enabled && i > 0 ? act('catalog_move', { ...f, delta: -1 }, '<span aria-label="Move up">↑</span>') : ''}${x.enabled && i < all.length - 1 ? act('catalog_move', { ...f, delta: 1 }, '<span aria-label="Move down">↓</span>') : ''}
 ${browsable ? act('catalog_toggle', { ...f, on: x.enabled ? 0 : 1 }, x.enabled ? 'Hide' : 'Show') : ''}</div></li>`;
     })

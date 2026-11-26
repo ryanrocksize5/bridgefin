@@ -35,9 +35,26 @@ export function catalogSupports(def: CatalogDef, extraName: string): boolean {
   return catalogExtras(def).some((e) => e.name === extraName);
 }
 
-/** A catalog can be shown as a plain library only if it has no required extras. */
+/**
+ * A catalog can be shown as a library when every required extra has a choice list
+ * (e.g. Cinemeta "New" requires a year: we default to the first option).
+ */
 export function catalogBrowsable(def: CatalogDef): boolean {
-  return !catalogExtras(def).some((e) => e.isRequired);
+  return catalogExtras(def).every((e) => !e.isRequired || (e.options?.length ?? 0) > 0);
+}
+
+/** Default values for required extras (first option). */
+export function catalogDefaults(def: CatalogDef): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const e of catalogExtras(def)) if (e.isRequired && e.options?.length) out[e.name] = e.options[0];
+  return out;
+}
+
+/** Human description of why a catalog can't be a library. */
+export function catalogBlocker(def: CatalogDef): string | undefined {
+  const req = catalogExtras(def).find((e) => e.isRequired && !(e.options?.length));
+  if (!req) return undefined;
+  return req.name === 'search' ? 'Search only' : `Needs a "${req.name}" value, so it can't be a library`;
 }
 
 export class AddonService {
@@ -233,7 +250,8 @@ export class AddonService {
     return { items: all.slice(start, Math.min(start + limit, all.length)), total: all.length };
   }
 
-  async catalogAll(ref: CatalogRef, hardCap: number, extra: Record<string, string> = {}): Promise<Meta[]> {
+  async catalogAll(ref: CatalogRef, hardCap: number, extraIn: Record<string, string> = {}): Promise<Meta[]> {
+    const extra = { ...catalogDefaults(ref.def), ...extraIn };
     const all: Meta[] = [];
     const seen = new Set<string>();
     let skip = 0;
