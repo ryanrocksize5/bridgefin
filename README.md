@@ -12,8 +12,25 @@ results already cached on TorBox are listed, so playback starts straight away.
 - One username and password, and a settings page that works on your phone too.
 
 <p align="center">
-  <img src="docs/images/settings-phone.png" width="280" alt="Bridgefin's settings page on an iPhone, showing the server address to add in Infuse or Swiftfin">
+  <img src="docs/images/setup-demo.gif" width="640" alt="Setting up Bridgefin: signing in to the settings page, installing an addon from its link, choosing which of its catalogs become libraries, and finding the TorBox key field">
+  <br><em>Setting up Bridgefin in your browser (20 seconds)</em>
 </p>
+
+## Which apps work
+
+| App | Works? | |
+|---|---|---|
+| **Infuse** (iPhone, iPad, Apple TV, Mac) | ✅ | Recommended. Plays almost any file. |
+| **Swiftfin** (iPhone, iPad, Apple TV) | ✅ | Free. Tested on iPhone. |
+| **Jellyfin Mobile**, the official Jellyfin app | ❌ | See below. |
+
+The official Jellyfin app isn't really an app of its own: it shows the web interface that a
+real Jellyfin server provides. Bridgefin doesn't include that web interface, so the app just
+opens Bridgefin's settings page.
+
+Even with that interface, its player can't play MKV files (the format of most streams) unless
+the server converts them as you watch. Bridgefin deliberately doesn't convert video, which is
+what keeps it light. Use Infuse or Swiftfin instead: both play the files directly.
 
 ## What you get
 
@@ -195,6 +212,9 @@ This also deletes everything Bridgefin saved, including your TorBox key.
   New-NetFirewallRule -DisplayName "Bridgefin" -Direction Inbound -Protocol TCP -LocalPort 8096 -Action Allow -Profile Any
   ```
 - Check Docker Desktop is running.
+
+**The official Jellyfin app only shows Bridgefin's settings page.** That app isn't supported
+(see [Which apps work](#which-apps-work)). Use Infuse or Swiftfin.
 
 **I can't find Jellyfin in Infuse.** Jellyfin is listed after you tap **Add Media Server**, in
 the **Media Servers** section under Settings → Add Files. It is not in the main list of file
