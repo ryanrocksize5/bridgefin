@@ -9,7 +9,11 @@ results already cached on TorBox are listed, so playback starts straight away.
 
 - Light: about 35 MB of memory, no video conversion, no torrent downloading on your computer.
 - Works on its own. Linking your Stremio account is optional.
-- One username and password, and a settings page in your browser.
+- One username and password, and a settings page that works on your phone too.
+
+<p align="center">
+  <img src="docs/images/settings-phone.png" width="280" alt="Bridgefin's settings page on an iPhone, showing the server address to add in Infuse or Swiftfin">
+</p>
 
 ## What you get
 
@@ -98,18 +102,37 @@ password. Then, going down the page:
 
 1. **Stremio account** (optional, but the quickest): sign in to import your addons, library
    and watch progress. Your Stremio password is only used once and is not stored.
+
+   <img src="docs/images/settings-stremio.png" width="600" alt="The Stremio account section, with email and password fields and a Link account button">
+
 2. **Addons**: if you didn't link Stremio, paste the manifest link of each stream addon you
    use (the link ending in `/manifest.json`, from the addon's install or configure page).
    - Addon links already set up with your TorBox key work.
    - Addons that only list torrents work too. Bridgefin checks them against your TorBox
      cache itself.
-3. **Streams**: paste your **TorBox API key**. The page should then say *TorBox connected*.
-4. **Libraries**: pick which catalogs you want to browse (Popular and Featured are on already).
+3. **Libraries**: pick which catalogs you want to browse (Popular and Featured are on already).
+
+   <img src="docs/images/settings-addons-libraries.png" width="600" alt="The Addons and Libraries sections: installed addons, a box to paste a manifest link, and catalogs with Show and Hide buttons">
+
+   A dot next to a section turns from amber to teal once that part is set up. The screenshots
+   show a fresh install: no stream addon and no TorBox key yet.
+
+4. **Streams**: paste your **TorBox API key**. The page should then say *TorBox connected*.
+   Below it you can choose qualities, how many versions to list, and subtitle languages.
+
+   <img src="docs/images/settings-streams.png" width="600" alt="The Streams section: TorBox API key field, quality limits, versions per quality, subtitle languages, and how video reaches your player">
+
 
 ### 7. Connect your iPhone, iPad or Apple TV
 
 First, check your phone can reach Bridgefin: open Safari and go to `http://YOUR-IP:8096/health`.
 It should say **Healthy**. If it doesn't, see [Troubleshooting](#troubleshooting).
+
+The top of the settings page sums up what to enter. Open it from your phone
+(`http://YOUR-IP:8096/admin`) and it shows your exact address with a Copy button:
+
+<img src="docs/images/settings-connect.png" width="600" alt="The top of the settings page: the server address with a Copy button, the username, and where to add it in Infuse and Swiftfin">
+
 
 **Infuse (iPhone and iPad)**
 
