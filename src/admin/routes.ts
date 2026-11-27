@@ -217,12 +217,19 @@ function renderSettings(app: App, c: Ctx): string {
   };
 
   // ---------- hero
+  const onLocalhost = /^(localhost|127\.0\.0\.1|\[::1\])(:|$)/i.test(host);
+  const port = host.includes(':') && !host.endsWith(']') ? host.slice(host.lastIndexOf(':') + 1) : String(app.cfg.port);
   const hero = `<section class="connect" aria-labelledby="connect-h">
 <p id="connect-h">Add this server in Infuse or Swiftfin as a Jellyfin server</p>
-<div class="addr"><code>${esc(address)}</code><button type="button" class="small" data-copy="${esc(address)}">Copy</button></div>
+${
+    onLocalhost
+      ? `<div class="addr"><code>http://YOUR-COMPUTER-IP:${esc(port)}</code></div>
+<p>You opened this page on the computer itself, so it can't show the address your phone needs. Use the computer's network address, like <code style="color:#fff">192.168.1.23</code>. On Windows it's under Settings → Network &amp; internet → your network → IPv4 address; on a Mac, System Settings → Wi-Fi → Details.</p>`
+      : `<div class="addr"><code>${esc(address)}</code><button type="button" class="small" data-copy="${esc(address)}">Copy</button></div>`
+  }
 <dl><dt>Username</dt><dd>${esc(app.auth.username())}</dd>
 <dt>Password</dt><dd>the one you signed in with here</dd>
-<dt>Infuse</dt><dd>Settings → Add Files → Jellyfin. Choose Direct Mode to browse catalogs live.</dd>
+<dt>Infuse</dt><dd>Settings (gear) → Add Files → under Media Servers, Add Media Server → Jellyfin. Under Advanced, leave Library Mode off. On Apple TV: Settings → Shares → Add Media Server.</dd>
 <dt>Swiftfin</dt><dd>Connect to Server, then sign in.</dd></dl></section>`;
 
   // ---------- addons
